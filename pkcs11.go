@@ -11,7 +11,7 @@ package pkcs11
 // * CK_ULONG never overflows an Go int
 
 /*
-#cgo windows CFLAGS: -DPACKED_STRUCTURES
+#cgo windows CFLAGS: -DREPACK_STRUCTURES
 #cgo windows LDFLAGS: -lltdl
 #cgo linux LDFLAGS: -lltdl -ldl
 #cgo darwin CFLAGS: -I/usr/local/share/libtool
@@ -238,17 +238,23 @@ CK_RV Logout(struct ctx * c, CK_SESSION_HANDLE session)
 }
 
 CK_RV CreateObject(struct ctx * c, CK_SESSION_HANDLE session,
-		   CK_ATTRIBUTE_PTR temp, CK_ULONG tempCount,
+		   ckAttrPtr temp, CK_ULONG tempCount,
 		   CK_OBJECT_HANDLE_PTR obj)
 {
-	return c->sym->C_CreateObject(session, temp, tempCount, obj);
+	ATTR_TO_C(tempc, temp, tempCount, NULL);
+	CK_RV e = c->sym->C_CreateObject(session, tempc, tempCount, obj);
+	ATTR_FREE(tempc);
+	return e;
 }
 
 CK_RV CopyObject(struct ctx * c, CK_SESSION_HANDLE session, CK_OBJECT_HANDLE o,
-		 CK_ATTRIBUTE_PTR temp, CK_ULONG tempCount,
+		 ckAttrPtr temp, CK_ULONG tempCount,
 		 CK_OBJECT_HANDLE_PTR obj)
 {
-	return c->sym->C_CopyObject(session, o, temp, tempCount, obj);
+	ATTR_TO_C(tempc, temp, tempCount, NULL);
+	CK_RV e = c->sym->C_CopyObject(session, o, tempc, tempCount, obj);
+	ATTR_FREE(tempc);
+	return e;
 }
 
 CK_RV DestroyObject(struct ctx * c, CK_SESSION_HANDLE session,
@@ -266,37 +272,48 @@ CK_RV GetObjectSize(struct ctx * c, CK_SESSION_HANDLE session,
 }
 
 CK_RV GetAttributeValue(struct ctx * c, CK_SESSION_HANDLE session,
-			CK_OBJECT_HANDLE object, CK_ATTRIBUTE_PTR temp,
+			CK_OBJECT_HANDLE object, ckAttrPtr temp,
 			CK_ULONG templen)
 {
+	ATTR_TO_C(tempc, temp, templen, NULL);
 	// Call for the first time, check the returned ulValue in the attributes, then
 	// allocate enough space and try again.
-	CK_RV e = c->sym->C_GetAttributeValue(session, object, temp, templen);
+	CK_RV e = c->sym->C_GetAttributeValue(session, object, tempc, templen);
 	if (e != CKR_OK) {
+		ATTR_FREE(tempc);
 		return e;
 	}
 	CK_ULONG i;
 	for (i = 0; i < templen; i++) {
-		if ((CK_LONG) temp[i].ulValueLen == -1) {
+		if ((CK_LONG) tempc[i].ulValueLen == -1) {
 			// either access denied or no such object
 			continue;
 		}
-		temp[i].pValue = calloc(temp[i].ulValueLen, sizeof(CK_BYTE));
+		tempc[i].pValue = calloc(tempc[i].ulValueLen, sizeof(CK_BYTE));
 	}
-	return c->sym->C_GetAttributeValue(session, object, temp, templen);
+	e = c->sym->C_GetAttributeValue(session, object, tempc, templen);
+	ATTR_FROM_C(temp, tempc, templen);
+	ATTR_FREE(tempc);
+	return e;
 }
 
 CK_RV SetAttributeValue(struct ctx * c, CK_SESSION_HANDLE session,
-			CK_OBJECT_HANDLE object, CK_ATTRIBUTE_PTR temp,
+			CK_OBJECT_HANDLE object, ckAttrPtr temp,
 			CK_ULONG templen)
 {
-	return c->sym->C_SetAttributeValue(session, object, temp, templen);
+	ATTR_TO_C(tempc, temp, templen, NULL);
+	CK_RV e = c->sym->C_SetAttributeValue(session, object, tempc, templen);
+	ATTR_FREE(tempc);
+	return e;
 }
 
 CK_RV FindObjectsInit(struct ctx * c, CK_SESSION_HANDLE session,
-		      CK_ATTRIBUTE_PTR temp, CK_ULONG tempCount)
+		      ckAttrPtr temp, CK_ULONG tempCount)
 {
-	return c->sym->C_FindObjectsInit(session, temp, tempCount);
+	ATTR_TO_C(tempc, temp, tempCount, NULL);
+	CK_RV e = c->sym->C_FindObjectsInit(session, tempc, tempCount);
+	ATTR_FREE(tempc);
+	return e;
 }
 
 CK_RV FindObjects(struct ctx * c, CK_SESSION_HANDLE session,
@@ -315,9 +332,11 @@ CK_RV FindObjectsFinal(struct ctx * c, CK_SESSION_HANDLE session)
 }
 
 CK_RV EncryptInit(struct ctx * c, CK_SESSION_HANDLE session,
-		  CK_MECHANISM_PTR mechanism, CK_OBJECT_HANDLE key)
+		  ckMechPtr mechanism, CK_OBJECT_HANDLE key)
 {
-	return c->sym->C_EncryptInit(session, mechanism, key);
+	MECH_TO_C(m, mechanism);
+	CK_RV e = c->sym->C_EncryptInit(session, m, key);
+	return e;
 }
 
 CK_RV Encrypt(struct ctx * c, CK_SESSION_HANDLE session, CK_BYTE_PTR message,
@@ -369,9 +388,11 @@ CK_RV EncryptFinal(struct ctx * c, CK_SESSION_HANDLE session,
 }
 
 CK_RV DecryptInit(struct ctx * c, CK_SESSION_HANDLE session,
-		  CK_MECHANISM_PTR mechanism, CK_OBJECT_HANDLE key)
+		  ckMechPtr mechanism, CK_OBJECT_HANDLE key)
 {
-	return c->sym->C_DecryptInit(session, mechanism, key);
+	MECH_TO_C(m, mechanism);
+	CK_RV e = c->sym->C_DecryptInit(session, m, key);
+	return e;
 }
 
 CK_RV Decrypt(struct ctx * c, CK_SESSION_HANDLE session, CK_BYTE_PTR cipher,
@@ -423,9 +444,11 @@ CK_RV DecryptFinal(struct ctx * c, CK_SESSION_HANDLE session,
 }
 
 CK_RV DigestInit(struct ctx * c, CK_SESSION_HANDLE session,
-		 CK_MECHANISM_PTR mechanism)
+		 ckMechPtr mechanism)
 {
-	return c->sym->C_DigestInit(session, mechanism);
+	MECH_TO_C(m, mechanism);
+	CK_RV e = c->sym->C_DigestInit(session, m);
+	return e;
 }
 
 CK_RV Digest(struct ctx * c, CK_SESSION_HANDLE session, CK_BYTE_PTR message,
@@ -472,9 +495,11 @@ CK_RV DigestFinal(struct ctx * c, CK_SESSION_HANDLE session, CK_BYTE_PTR * hash,
 }
 
 CK_RV SignInit(struct ctx * c, CK_SESSION_HANDLE session,
-	       CK_MECHANISM_PTR mechanism, CK_OBJECT_HANDLE key)
+	       ckMechPtr mechanism, CK_OBJECT_HANDLE key)
 {
-	return c->sym->C_SignInit(session, mechanism, key);
+	MECH_TO_C(m, mechanism);
+	CK_RV e = c->sym->C_SignInit(session, m, key);
+	return e;
 }
 
 CK_RV Sign(struct ctx * c, CK_SESSION_HANDLE session, CK_BYTE_PTR message,
@@ -515,9 +540,11 @@ CK_RV SignFinal(struct ctx * c, CK_SESSION_HANDLE session, CK_BYTE_PTR * sig,
 }
 
 CK_RV SignRecoverInit(struct ctx * c, CK_SESSION_HANDLE session,
-		      CK_MECHANISM_PTR mechanism, CK_OBJECT_HANDLE key)
+		      ckMechPtr mech, CK_OBJECT_HANDLE key)
 {
-	return c->sym->C_SignRecoverInit(session, mechanism, key);
+	MECH_TO_C(m, mech);
+	CK_RV rv = c->sym->C_SignRecoverInit(session, m, key);
+	return rv;
 }
 
 CK_RV SignRecover(struct ctx * c, CK_SESSION_HANDLE session, CK_BYTE_PTR data,
@@ -536,9 +563,11 @@ CK_RV SignRecover(struct ctx * c, CK_SESSION_HANDLE session, CK_BYTE_PTR data,
 }
 
 CK_RV VerifyInit(struct ctx * c, CK_SESSION_HANDLE session,
-		 CK_MECHANISM_PTR mechanism, CK_OBJECT_HANDLE key)
+		 ckMechPtr mech, CK_OBJECT_HANDLE key)
 {
-	return c->sym->C_VerifyInit(session, mechanism, key);
+	MECH_TO_C(m, mech);
+	CK_RV rv = c->sym->C_VerifyInit(session, m, key);
+	return rv;
 }
 
 CK_RV Verify(struct ctx * c, CK_SESSION_HANDLE session, CK_BYTE_PTR message,
@@ -563,9 +592,11 @@ CK_RV VerifyFinal(struct ctx * c, CK_SESSION_HANDLE session, CK_BYTE_PTR sig,
 }
 
 CK_RV VerifyRecoverInit(struct ctx * c, CK_SESSION_HANDLE session,
-			CK_MECHANISM_PTR mechanism, CK_OBJECT_HANDLE key)
+			ckMechPtr mech, CK_OBJECT_HANDLE key)
 {
-	return c->sym->C_VerifyRecoverInit(session, mechanism, key);
+	MECH_TO_C(m, mech);
+	CK_RV rv = c->sym->C_VerifyRecoverInit(session, m, key);
+	return rv;
 }
 
 CK_RV VerifyRecover(struct ctx * c, CK_SESSION_HANDLE session, CK_BYTE_PTR sig,
@@ -657,28 +688,39 @@ CK_RV DecryptVerifyUpdate(struct ctx * c, CK_SESSION_HANDLE session,
 }
 
 CK_RV GenerateKey(struct ctx * c, CK_SESSION_HANDLE session,
-		  CK_MECHANISM_PTR mechanism, CK_ATTRIBUTE_PTR temp,
+		  ckMechPtr mechanism, ckAttrPtr temp,
 		  CK_ULONG tempCount, CK_OBJECT_HANDLE_PTR key)
 {
-	return c->sym->C_GenerateKey(session, mechanism, temp, tempCount, key);
+	MECH_TO_C(m, mechanism);
+	ATTR_TO_C(tempc, temp, tempCount, NULL);
+	CK_RV e = c->sym->C_GenerateKey(session, m, tempc, tempCount, key);
+	ATTR_FREE(tempc);
+	return e;
 }
 
 CK_RV GenerateKeyPair(struct ctx * c, CK_SESSION_HANDLE session,
-		      CK_MECHANISM_PTR mechanism, CK_ATTRIBUTE_PTR pub,
-		      CK_ULONG pubCount, CK_ATTRIBUTE_PTR priv,
+		      ckMechPtr mechanism, ckAttrPtr pub,
+		      CK_ULONG pubCount, ckAttrPtr priv,
 		      CK_ULONG privCount, CK_OBJECT_HANDLE_PTR pubkey,
 		      CK_OBJECT_HANDLE_PTR privkey)
 {
-	return c->sym->C_GenerateKeyPair(session, mechanism, pub, pubCount,
-		priv, privCount, pubkey, privkey);
+	MECH_TO_C(m, mechanism);
+	ATTR_TO_C(pubc, pub, pubCount, NULL);
+	ATTR_TO_C(privc, priv, privCount, pubc);
+	CK_RV e = c->sym->C_GenerateKeyPair(session, m, pubc, pubCount,
+		privc, privCount, pubkey, privkey);
+	ATTR_FREE(pubc);
+	ATTR_FREE(privc);
+	return e;
 }
 
 CK_RV WrapKey(struct ctx * c, CK_SESSION_HANDLE session,
-	      CK_MECHANISM_PTR mechanism, CK_OBJECT_HANDLE wrappingkey,
+	      ckMechPtr mechanism, CK_OBJECT_HANDLE wrappingkey,
 	      CK_OBJECT_HANDLE key, CK_BYTE_PTR * wrapped,
 	      CK_ULONG_PTR wrappedlen)
 {
-	CK_RV rv = c->sym->C_WrapKey(session, mechanism, wrappingkey, key, NULL,
+	MECH_TO_C(m, mechanism);
+	CK_RV rv = c->sym->C_WrapKey(session, m, wrappingkey, key, NULL,
 				     wrappedlen);
 	if (rv != CKR_OK) {
 		return rv;
@@ -687,25 +729,33 @@ CK_RV WrapKey(struct ctx * c, CK_SESSION_HANDLE session,
 	if (*wrapped == NULL) {
 		return CKR_HOST_MEMORY;
 	}
-	rv = c->sym->C_WrapKey(session, mechanism, wrappingkey, key, *wrapped,
+	rv = c->sym->C_WrapKey(session, m, wrappingkey, key, *wrapped,
 			       wrappedlen);
 	return rv;
 }
 
 CK_RV DeriveKey(struct ctx * c, CK_SESSION_HANDLE session,
-		CK_MECHANISM_PTR mechanism, CK_OBJECT_HANDLE basekey,
-		CK_ATTRIBUTE_PTR a, CK_ULONG alen, CK_OBJECT_HANDLE_PTR key)
+		ckMechPtr mech, CK_OBJECT_HANDLE basekey,
+		ckAttrPtr a, CK_ULONG alen, CK_OBJECT_HANDLE_PTR key)
 {
-	return c->sym->C_DeriveKey(session, mechanism, basekey, a, alen, key);
+	MECH_TO_C(m, mech);
+	ATTR_TO_C(tempc, a, alen, NULL);
+	CK_RV e = c->sym->C_DeriveKey(session, m, basekey, tempc, alen, key);
+	ATTR_FREE(tempc);
+	return e;
 }
 
 CK_RV UnwrapKey(struct ctx * c, CK_SESSION_HANDLE session,
-		CK_MECHANISM_PTR mechanism, CK_OBJECT_HANDLE unwrappingkey,
+		ckMechPtr mech, CK_OBJECT_HANDLE unwrappingkey,
 		CK_BYTE_PTR wrappedkey, CK_ULONG wrappedkeylen,
-		CK_ATTRIBUTE_PTR a, CK_ULONG alen, CK_OBJECT_HANDLE_PTR key)
+		ckAttrPtr a, CK_ULONG alen, CK_OBJECT_HANDLE_PTR key)
 {
-	return c->sym->C_UnwrapKey(session, mechanism, unwrappingkey, wrappedkey,
-				      wrappedkeylen, a, alen, key);
+	MECH_TO_C(m, mech);
+	ATTR_TO_C(tempc, a, alen, NULL);
+	CK_RV e = c->sym->C_UnwrapKey(session, m, unwrappingkey, wrappedkey,
+				      wrappedkeylen, tempc, alen, key);
+	ATTR_FREE(tempc);
+	return e;
 }
 
 CK_RV SeedRandom(struct ctx * c, CK_SESSION_HANDLE session, CK_BYTE_PTR seed,
@@ -733,11 +783,37 @@ CK_RV WaitForSlotEvent(struct ctx * c, CK_FLAGS flags, CK_ULONG_PTR slot)
 	return e;
 }
 
-static inline CK_VOID_PTR getAttributePval(CK_ATTRIBUTE_PTR a)
-{
-	return a->pValue;
+#ifdef REPACK_STRUCTURES
+
+CK_RV attrsToC(CK_ATTRIBUTE_PTR *attrOut, ckAttrPtr attrIn, CK_ULONG count) {
+	CK_ATTRIBUTE_PTR attr = calloc(count, sizeof(CK_ATTRIBUTE));
+	if (attr == NULL) {
+		return CKR_HOST_MEMORY;
+	}
+	for (int i = 0; i < count; i++) {
+		attr[i].type = attrIn[i].type;
+		attr[i].pValue = attrIn[i].pValue;
+		attr[i].ulValueLen = attrIn[i].ulValueLen;
+	}
+	*attrOut = attr;
+	return CKR_OK;
 }
 
+void attrsFromC(ckAttrPtr attrOut, CK_ATTRIBUTE_PTR attrIn, CK_ULONG count) {
+	for (int i = 0; i < count; i++) {
+		attrOut[i].type = attrIn[i].type;
+		attrOut[i].pValue = attrIn[i].pValue;
+		attrOut[i].ulValueLen = attrIn[i].ulValueLen;
+	}
+}
+
+void mechToC(CK_MECHANISM_PTR mechOut, ckMechPtr mechIn) {
+	mechOut->mechanism = mechIn->mechanism;
+	mechOut->pParameter = mechIn->pParameter;
+	mechOut->ulParameterLen = mechIn->ulParameterLen;
+}
+
+#endif
 */
 import "C"
 import "strings"
@@ -1048,22 +1124,21 @@ func (c *Ctx) GetObjectSize(sh SessionHandle, oh ObjectHandle) (uint, error) {
 func (c *Ctx) GetAttributeValue(sh SessionHandle, o ObjectHandle, a []*Attribute) ([]*Attribute, error) {
 	// copy the attribute list and make all the values nil, so that
 	// the C function can (allocate) fill them in
-	pa := make([]C.CK_ATTRIBUTE, len(a))
+	pa := make([]C.ckAttr, len(a))
 	for i := 0; i < len(a); i++ {
 		pa[i]._type = C.CK_ATTRIBUTE_TYPE(a[i].Type)
 	}
-	e := C.GetAttributeValue(c.ctx, C.CK_SESSION_HANDLE(sh), C.CK_OBJECT_HANDLE(o), &pa[0], C.CK_ULONG(len(a)))
-	if err := toError(e); err != nil {
-		return nil, err
+	e := C.GetAttributeValue(c.ctx, C.CK_SESSION_HANDLE(sh), C.CK_OBJECT_HANDLE(o), C.ckAttrPtr(&pa[0]), C.CK_ULONG(len(a)))
+	if toError(e) != nil {
+		return nil, toError(e)
 	}
 	a1 := make([]*Attribute, len(a))
 	for i, c := range pa {
 		x := new(Attribute)
 		x.Type = uint(c._type)
 		if int(c.ulValueLen) != -1 {
-			buf := unsafe.Pointer(C.getAttributePval(&c))
-			x.Value = C.GoBytes(buf, C.int(c.ulValueLen))
-			C.free(buf)
+			x.Value = C.GoBytes(unsafe.Pointer(c.pValue), C.int(c.ulValueLen))
+			C.free(unsafe.Pointer(c.pValue))
 		}
 		a1[i] = x
 	}
@@ -1120,7 +1195,7 @@ func (c *Ctx) FindObjectsFinal(sh SessionHandle) error {
 
 // EncryptInit initializes an encryption operation.
 func (c *Ctx) EncryptInit(sh SessionHandle, m []*Mechanism, o ObjectHandle) error {
-	arena, mech := cMechanism(m)
+	arena, mech, _ := cMechanismList(m)
 	defer arena.Free()
 	e := C.EncryptInit(c.ctx, C.CK_SESSION_HANDLE(sh), mech, C.CK_OBJECT_HANDLE(o))
 	return toError(e)
@@ -1173,7 +1248,7 @@ func (c *Ctx) EncryptFinal(sh SessionHandle) ([]byte, error) {
 
 // DecryptInit initializes a decryption operation.
 func (c *Ctx) DecryptInit(sh SessionHandle, m []*Mechanism, o ObjectHandle) error {
-	arena, mech := cMechanism(m)
+	arena, mech, _ := cMechanismList(m)
 	defer arena.Free()
 	e := C.DecryptInit(c.ctx, C.CK_SESSION_HANDLE(sh), mech, C.CK_OBJECT_HANDLE(o))
 	return toError(e)
@@ -1226,7 +1301,7 @@ func (c *Ctx) DecryptFinal(sh SessionHandle) ([]byte, error) {
 
 // DigestInit initializes a message-digesting operation.
 func (c *Ctx) DigestInit(sh SessionHandle, m []*Mechanism) error {
-	arena, mech := cMechanism(m)
+	arena, mech, _ := cMechanismList(m)
 	defer arena.Free()
 	e := C.DigestInit(c.ctx, C.CK_SESSION_HANDLE(sh), mech)
 	return toError(e)
@@ -1286,7 +1361,7 @@ func (c *Ctx) DigestFinal(sh SessionHandle) ([]byte, error) {
 // operation, where the signature is (will be) an appendix to
 // the data, and plaintext cannot be recovered from the signature.
 func (c *Ctx) SignInit(sh SessionHandle, m []*Mechanism, o ObjectHandle) error {
-	arena, mech := cMechanism(m)
+	arena, mech, _ := cMechanismList(m) // Only the first is used, but still use a list.
 	defer arena.Free()
 	e := C.SignInit(c.ctx, C.CK_SESSION_HANDLE(sh), mech, C.CK_OBJECT_HANDLE(o))
 	return toError(e)
@@ -1333,7 +1408,7 @@ func (c *Ctx) SignFinal(sh SessionHandle) ([]byte, error) {
 
 // SignRecoverInit initializes a signature operation, where the data can be recovered from the signature.
 func (c *Ctx) SignRecoverInit(sh SessionHandle, m []*Mechanism, key ObjectHandle) error {
-	arena, mech := cMechanism(m)
+	arena, mech, _ := cMechanismList(m)
 	defer arena.Free()
 	e := C.SignRecoverInit(c.ctx, C.CK_SESSION_HANDLE(sh), mech, C.CK_OBJECT_HANDLE(key))
 	return toError(e)
@@ -1358,7 +1433,7 @@ func (c *Ctx) SignRecover(sh SessionHandle, data []byte) ([]byte, error) {
 // signature is an appendix to the data, and plaintext cannot
 // be recovered from the signature (e.g. DSA).
 func (c *Ctx) VerifyInit(sh SessionHandle, m []*Mechanism, key ObjectHandle) error {
-	arena, mech := cMechanism(m)
+	arena, mech, _ := cMechanismList(m) // only use one here
 	defer arena.Free()
 	e := C.VerifyInit(c.ctx, C.CK_SESSION_HANDLE(sh), mech, C.CK_OBJECT_HANDLE(key))
 	return toError(e)
@@ -1390,7 +1465,7 @@ func (c *Ctx) VerifyFinal(sh SessionHandle, signature []byte) error {
 // VerifyRecoverInit initializes a signature verification
 // operation, where the data is recovered from the signature.
 func (c *Ctx) VerifyRecoverInit(sh SessionHandle, m []*Mechanism, key ObjectHandle) error {
-	arena, mech := cMechanism(m)
+	arena, mech, _ := cMechanismList(m)
 	defer arena.Free()
 	e := C.VerifyRecoverInit(c.ctx, C.CK_SESSION_HANDLE(sh), mech, C.CK_OBJECT_HANDLE(key))
 	return toError(e)
@@ -1477,7 +1552,7 @@ func (c *Ctx) GenerateKey(sh SessionHandle, m []*Mechanism, temp []*Attribute) (
 	var key C.CK_OBJECT_HANDLE
 	attrarena, t, tcount := cAttributeList(temp)
 	defer attrarena.Free()
-	mecharena, mech := cMechanism(m)
+	mecharena, mech, _ := cMechanismList(m)
 	defer mecharena.Free()
 	e := C.GenerateKey(c.ctx, C.CK_SESSION_HANDLE(sh), mech, t, tcount, C.CK_OBJECT_HANDLE_PTR(&key))
 	e1 := toError(e)
@@ -1497,7 +1572,7 @@ func (c *Ctx) GenerateKeyPair(sh SessionHandle, m []*Mechanism, public, private 
 	defer pubarena.Free()
 	privarena, priv, privcount := cAttributeList(private)
 	defer privarena.Free()
-	mecharena, mech := cMechanism(m)
+	mecharena, mech, _ := cMechanismList(m)
 	defer mecharena.Free()
 	e := C.GenerateKeyPair(c.ctx, C.CK_SESSION_HANDLE(sh), mech, pub, pubcount, priv, privcount, C.CK_OBJECT_HANDLE_PTR(&pubkey), C.CK_OBJECT_HANDLE_PTR(&privkey))
 	e1 := toError(e)
@@ -1513,7 +1588,7 @@ func (c *Ctx) WrapKey(sh SessionHandle, m []*Mechanism, wrappingkey, key ObjectH
 		wrappedkey    C.CK_BYTE_PTR
 		wrappedkeylen C.CK_ULONG
 	)
-	arena, mech := cMechanism(m)
+	arena, mech, _ := cMechanismList(m)
 	defer arena.Free()
 	e := C.WrapKey(c.ctx, C.CK_SESSION_HANDLE(sh), mech, C.CK_OBJECT_HANDLE(wrappingkey), C.CK_OBJECT_HANDLE(key), &wrappedkey, &wrappedkeylen)
 	if toError(e) != nil {
@@ -1529,7 +1604,7 @@ func (c *Ctx) UnwrapKey(sh SessionHandle, m []*Mechanism, unwrappingkey ObjectHa
 	var key C.CK_OBJECT_HANDLE
 	attrarena, ac, aclen := cAttributeList(a)
 	defer attrarena.Free()
-	mecharena, mech := cMechanism(m)
+	mecharena, mech, _ := cMechanismList(m)
 	defer mecharena.Free()
 	e := C.UnwrapKey(c.ctx, C.CK_SESSION_HANDLE(sh), mech, C.CK_OBJECT_HANDLE(unwrappingkey), C.CK_BYTE_PTR(unsafe.Pointer(&wrappedkey[0])), C.CK_ULONG(len(wrappedkey)), ac, aclen, &key)
 	return ObjectHandle(key), toError(e)
@@ -1540,7 +1615,7 @@ func (c *Ctx) DeriveKey(sh SessionHandle, m []*Mechanism, basekey ObjectHandle, 
 	var key C.CK_OBJECT_HANDLE
 	attrarena, ac, aclen := cAttributeList(a)
 	defer attrarena.Free()
-	mecharena, mech := cMechanism(m)
+	mecharena, mech, _ := cMechanismList(m)
 	defer mecharena.Free()
 	e := C.DeriveKey(c.ctx, C.CK_SESSION_HANDLE(sh), mech, C.CK_OBJECT_HANDLE(basekey), ac, aclen, &key)
 	return ObjectHandle(key), toError(e)
